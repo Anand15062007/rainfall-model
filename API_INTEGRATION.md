@@ -1,0 +1,3 @@
+# API integration plan
+
+Local mock and CSV providers are functional. The real provider intentionally has no vendor-specific behavior yet. After a vendor and credentials are selected, implement environment-based authentication without committing `.env`, timeouts, exponential retry, 429 handling, structured errors, schema validation, field mapping, missing-field tolerance, and mocked tests for auth, malformed data, outages and limits. Validate a single request before sending a full city grid workload. API keys expected later depend on chosen source: weather API; satellite/radar if used; map tile/geocoding service only if selected. The offline map uses public Folium tiles and requires no API key.
