@@ -71,6 +71,22 @@ streamlit run dashboard/app.py
 pytest
 ```
 
+## Coordinate rainfall forecast website
+
+Run the website after installing the project dependencies and adding `OPENWEATHER_API_KEY` to `.env`:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Open the local address printed by Streamlit (normally `http://localhost:8501`). Enter latitude, longitude, and a UTC forecast date. The site uses OpenWeather's forecast endpoint and displays the highest 3-hour precipitation probability returned for that date plus the sum of forecast 3-hour rainfall amounts. The API provides up to five days of 3-hour forecast intervals. This page reports the API forecast directly; it does not use the synthetic-trained model bundles as real-world predictions.
+
+To run the trained daily model after real historical training, pass hourly OpenWeather observations to the saved daily bundle. It uses the latest complete day with at least 18 hourly records to predict the next day:
+
+```bash
+python -m app.prediction.predict models/daily_random_forest_classifier.joblib --input data/raw/openweather_hourly.csv
+```
+
 ## Dataset schema
 
 Required provider fields are timestamp, grid ID, latitude, longitude. Standard weather columns include temperature, relative humidity, pressure, wind speed/direction, cloud cover, dew point, rainfall accumulation windows, and optional environmental measurements. Missing optional values remain missing until train-fitted imputation. The synthetic generator adds rainfall event and amount labels for convenience.
@@ -86,3 +102,34 @@ The canonical split is chronological by unique timestamp. Validation and test ob
 ## Limitations and next steps
 
 Synthetic data encodes plausible covariation but is not calibrated to a city or observation product. The orchestrated benchmark runs Logistic Regression, Random Forest, XGBoost and LSTM classification/regression using the same temporal holdout. Spatial/spatiotemporal experiments have split primitives rather than a complete benchmark runner. Grid clipping is bbox intersection, so edge cells may extend past the bbox. For operational forecasting, obtain quality-controlled, time-aligned historical data, establish appropriate validation protocols, and calibrate the full workflow.
+
+## OpenWeather + CHIRPS daily experiment
+
+The live-data experiment uses OpenWeather's **historical hourly observations** as predictors and the CHIRPS v3 **daily final satellite** product as rainfall target. The model predicts next-day area-mean rainfall for the configured bbox; it does not claim 1-km truth. CHIRPS cells are approximately 0.05 degrees (about 5 km), and the area mean stays at native-cell scale. CHIRPS daily satellite data starts in 1998. Its daily values distribute pentad totals using IMERG daily rainfall. OpenWeather's history endpoint is subscription-gated; a key that works for current conditions may not have history access. [CHIRPS v3 documentation](https://chc.ucsb.edu/data/chirps3) and [OpenWeather History API](https://openweathermap.org/api/history?collection=historical).
+
+The sample bbox in `configs/default.yaml` is only a placeholder. Replace the city name and bbox with the intended location before downloading. The code reads `OPENWEATHER_API_KEY` from the ignored local `.env`; never commit that file.
+
+Windows Command Prompt setup (replace the sample bbox in `configs\default.yaml` first):
+
+```bat
+py -3.12 -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+pip install -e .[all]
+copy .env.example .env
+notepad .env
+```
+
+Set `OPENWEATHER_API_KEY` in `.env` and save it. Then download and train:
+
+```bat
+python -m app.data.chirps_download --start-year 2015 --end-year 2025
+python -m app.data.openweather_history --start 2015-01-01 --end 2025-12-31
+python -m app.data.daily_pipeline
+```
+
+On macOS/Linux, activate with `source .venv/bin/activate`, copy the env template with `cp .env.example .env`, and use the same `python -m ...` commands. `pip install -e '.[all]'` installs the optional model, dashboard, ERA5, CHIRPS, and test dependencies too. Full historical OpenWeather downloads can make hundreds of requests and require an eligible subscription; the downloader reports a clear access error if history is not enabled.
+
+CHIRPS is read from remote NetCDF files using HTTP byte ranges, extracting only chunks that intersect the bbox. OpenWeather requests are issued in seven-day UTC windows and saved without credentials. The daily target uses a configurable 1.0 mm event threshold. The model table uses weather observed through day *t* to predict CHIRPS rainfall on day *t+1*. It compares Logistic Regression, Random Forest classification/regression, and XGBoost when installed. Preprocessing is fitted on the training interval; the classifier cutoff and model selection are chosen on validation data, then each model is scored on the later test interval. Validation-only permutation rankings are written to `experiments/validation_feature_ranking.csv` and `experiments/validation_feature_importance_by_model.csv`. Test metrics are written to `experiments/daily_live_metrics.json` and `experiments/daily_live_model_comparison.csv`.
+
+If OpenWeather returns HTTP 401/403, its historical API is not enabled for the account or key. Current-weather requests are not a substitute for historical training data. Do not train a historical model by joining today's live weather to old CHIRPS dates.

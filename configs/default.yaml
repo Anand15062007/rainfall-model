@@ -11,6 +11,9 @@ data:
   rainfall_threshold_mm: 0.1
   era5_start_year: 2015
   era5_end_year: 2025
+  live_start_year: 2015
+  live_end_year: 2025
+  daily_rainfall_threshold_mm: 1.0
 forecast:
   horizon_hours: 1
 features:
@@ -34,6 +37,7 @@ models:
   xgboost: true
   lstm: true
   selection_metric: f1 # validation threshold objective; use accuracy to optimize raw hit rate
+  daily_selection_metric: average_precision
 model_params:
   logistic_regression: {max_iter: 1000, class_weight: balanced}
   random_forest: {n_estimators: 250, min_samples_leaf: 2}
